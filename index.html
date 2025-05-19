@@ -45,15 +45,26 @@
 
 <script>
 const overlay = document.getElementById('quakeOverlay');
-let bounds = { top: 40, bottom: 25, left: 40, right: 65 }; // Iran area
+let iframe;
+
+// Assume global bounds (full world)
+let bounds = {
+  top: 90,    // North Pole
+  bottom: -90, // South Pole
+  left: -180,  // International Date Line
+  right: 180   // Prime Meridian
+};
+
 let iframeRect;
 
 function updateIframeSize() {
-  iframeRect = document.getElementById('mapFrame').getBoundingClientRect();
+  iframe = document.getElementById('mapFrame');
+  iframeRect = iframe.getBoundingClientRect();
 }
 window.addEventListener('resize', updateIframeSize);
 updateIframeSize();
 
+// Convert lat/lon to screen position
 function latLonToPixel(lat, lon) {
   const width = iframeRect.width;
   const height = iframeRect.height;
@@ -64,45 +75,63 @@ function latLonToPixel(lat, lon) {
   return { x, y };
 }
 
+// Fetch and plot real-time quakes
 async function fetchAndPlotQuakes() {
-  const url = 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/5.0_day.geojson ';
-  const res = await fetch(url);
-  const data = await res.json();
+  try {
+    const url = 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/5.0_day.geojson ';
+    const res = await fetch(url);
 
-  overlay.innerHTML = ''; // Clear old markers
+    if (!res.ok) throw new Error(`Fetch failed: ${res.status} ${res.statusText}`);
 
-  data.features.forEach(quake => {
-    const [lon, lat] = quake.geometry.coordinates;
-    const mag = quake.properties.mag;
+    const data = await res.json();
 
-    const pos = latLonToPixel(lat, lon);
+    overlay.innerHTML = ''; // Clear old markers
 
-    const div = document.createElement('div');
-    div.className = 'quake-marker';
-    div.style.left = `${pos.x}px`;
-    div.style.top = `${pos.y}px`;
-    div.title = `${quake.properties.title}\nMagnitude: ${mag}`;
+    data.features.forEach(quake => {
+      const [lon, lat] = quake.geometry.coordinates;
+      const mag = quake.properties.mag;
 
-    div.innerHTML = `
-      <svg width="${10 + mag * 2}" height="${10 + mag * 2}" viewBox="0 0 20 20">
-        <polygon points="10,0 0,20 20,20" fill="blue"/>
-      </svg>
-      <div style="font-size:10px;color:blue;">M${mag}</div>
-    `;
+      const pos = latLonToPixel(lat, lon);
 
-    div.addEventListener('click', () => {
-      alert(`${quake.properties.title}\nMagnitude: ${mag}\nTime: ${new Date(quake.properties.time).toLocaleString()}`);
+      // Skip if out of iframe bounds
+      if (
+        pos.x < -100 || pos.y < -100 ||
+        pos.x > iframeRect.width + 100 ||
+        pos.y > iframeRect.height + 100
+      ) return;
+
+      const div = document.createElement('div');
+      div.className = 'quake-marker';
+      div.style.left = `${pos.x}px`;
+      div.style.top = `${pos.y}px`;
+
+      div.innerHTML = `
+        <svg width="${10 + mag * 2}" height="${10 + mag * 2}" viewBox="0 0 20 20">
+          <polygon points="10,0 0,20 20,20" fill="blue"/>
+        </svg>
+        <div style="font-size:10px;color:blue;">M${mag}</div>
+      `;
+
+      div.title = `${quake.properties.title}\nMagnitude: ${mag}`;
+      div.addEventListener('click', () => {
+        alert(`${quake.properties.title}\nMagnitude: ${mag}\nTime: ${new Date(quake.properties.time).toLocaleString()}`);
+      });
+
+      overlay.appendChild(div);
     });
 
-    overlay.appendChild(div);
-  });
+    console.log("✅ Plotted", data.features.length, "quakes");
+
+  } catch (e) {
+    console.error("🚨 Error fetching quakes:", e);
+  }
 }
 
 // Initial load
 fetchAndPlotQuakes();
 
 // Auto-refresh every 10 minutes
-setInterval(fetchAndPlotQuakes, 10 * 60 * 1000); // 10 minutes
+setInterval(fetchAndPlotQuakes, 10 * 60 * 1000);
 </script>
 
 </body>
