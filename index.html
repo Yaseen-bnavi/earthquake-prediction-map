@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Earthquake Prediction & Observation</title>
+  <style>
+    body, html {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      font-family: sans-serif;
+    }
+
+    #mapFrame {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: 0;
+      border: none;
+    }
+
+    #quakeOverlay {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .quake-marker {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      pointer-events: auto;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+<!-- Load your predicted map -->
+<iframe id="mapFrame" src="global_earthquake_predictions_2025.html"></iframe>
+
+<!-- Overlay for observed earthquakes -->
+<div id="quakeOverlay"></div>
+
+<script>
+const overlay = document.getElementById('quakeOverlay');
+let bounds = { top: 40, bottom: 25, left: 40, right: 65 }; // Iran area
+let iframeRect;
+
+function updateIframeSize() {
+  iframeRect = document.getElementById('mapFrame').getBoundingClientRect();
+}
+window.addEventListener('resize', updateIframeSize);
+updateIframeSize();
+
+function latLonToPixel(lat, lon) {
+  const width = iframeRect.width;
+  const height = iframeRect.height;
+
+  const x = ((lon - bounds.left) / (bounds.right - bounds.left)) * width;
+  const y = ((bounds.top - lat) / (bounds.top - bounds.bottom)) * height;
+
+  return { x, y };
+}
+
+async function fetchAndPlotQuakes() {
+  const url = 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/5.0_day.geojson ';
+  const res = await fetch(url);
+  const data = await res.json();
+
+  overlay.innerHTML = ''; // Clear old markers
+
+  data.features.forEach(quake => {
+    const [lon, lat] = quake.geometry.coordinates;
+    const mag = quake.properties.mag;
+
+    const pos = latLonToPixel(lat, lon);
+
+    const div = document.createElement('div');
+    div.className = 'quake-marker';
+    div.style.left = `${pos.x}px`;
+    div.style.top = `${pos.y}px`;
+    div.title = `${quake.properties.title}\nMagnitude: ${mag}`;
+
+    div.innerHTML = `
+      <svg width="${10 + mag * 2}" height="${10 + mag * 2}" viewBox="0 0 20 20">
+        <polygon points="10,0 0,20 20,20" fill="blue"/>
+      </svg>
+      <div style="font-size:10px;color:blue;">M${mag}</div>
+    `;
+
+    div.addEventListener('click', () => {
+      alert(`${quake.properties.title}\nMagnitude: ${mag}\nTime: ${new Date(quake.properties.time).toLocaleString()}`);
+    });
+
+    overlay.appendChild(div);
+  });
+}
+
+// Initial load
+fetchAndPlotQuakes();
+
+// Auto-refresh every 10 minutes
+setInterval(fetchAndPlotQuakes, 10 * 60 * 1000); // 10 minutes
+</script>
+
+</body>
+</html>
